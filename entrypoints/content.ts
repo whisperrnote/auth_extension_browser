@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "../components/App";
-import { useExtensionStore, restoreStateFromStorage } from "../store/extensionStore";
+import { restoreStateFromStorage } from "../store/extensionStore";
+import { defineContentScript } from "wxt";
 
 // Widget button styles
 const widgetBtnStyle: React.CSSProperties = {

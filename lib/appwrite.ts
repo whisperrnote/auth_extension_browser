@@ -21,11 +21,434 @@ const appwriteAccount = new Account(appwriteClient);
 const appwriteDatabases = new Databases(appwriteClient);
 
 // --- Collection Structure & Field Mappings ---
-// ...existing code for ENCRYPTED_FIELDS, getPlaintextFields, COLLECTION_SCHEMAS...
+const ENCRYPTED_FIELDS = {
+  credentials: ['username', 'password', 'notes', 'customFields'],
+  totpSecrets: ['secretKey'],
+  folders: [],
+  securityLogs: [],
+  user: [],
+} as const;
+
+function getPlaintextFields<T>(allFields: (keyof T)[], encrypted: readonly string[]): string[] {
+  return allFields.filter(f => !encrypted.includes(f as string)).map(f => f as string);
+}
+
+export const COLLECTION_SCHEMAS = {
+  credentials: {
+    encrypted: ENCRYPTED_FIELDS.credentials,
+    plaintext: getPlaintextFields<Credentials>(
+      [
+        'userId', 'name', 'url', 'username', 'notes', 'folderId', 'tags', 'customFields',
+        'faviconUrl', 'createdAt', 'updatedAt', 'password', '$id', '$createdAt', '$updatedAt'
+      ],
+      ENCRYPTED_FIELDS.credentials
+    ),
+  },
+  totpSecrets: {
+    encrypted: ENCRYPTED_FIELDS.totpSecrets,
+    plaintext: getPlaintextFields<TotpSecrets>(
+      [
+        'userId', 'issuer', 'accountName', 'secretKey', 'algorithm', 'digits', 'period',
+        'folderId', 'createdAt', 'updatedAt', '$id', '$createdAt', '$updatedAt'
+      ],
+      ENCRYPTED_FIELDS.totpSecrets
+    ),
+  },
+  folders: {
+    encrypted: ENCRYPTED_FIELDS.folders,
+    plaintext: getPlaintextFields<Folders>(
+      [
+        'userId', 'name', 'parentFolderId', 'createdAt', 'updatedAt', '$id', '$createdAt', '$updatedAt'
+      ],
+      ENCRYPTED_FIELDS.folders
+    ),
+  },
+  securityLogs: {
+    encrypted: ENCRYPTED_FIELDS.securityLogs,
+    plaintext: getPlaintextFields<SecurityLogs>(
+      [
+        'userId', 'eventType', 'ipAddress', 'userAgent', 'details', 'timestamp',
+        '$id', '$createdAt', '$updatedAt'
+      ],
+      ENCRYPTED_FIELDS.securityLogs
+    ),
+  },
+  user: {
+    encrypted: ENCRYPTED_FIELDS.user,
+    plaintext: getPlaintextFields<User>(
+      [
+        'userId', 'email', 'masterpass', 'twofa', 'check', '$id', '$createdAt', '$updatedAt'
+      ],
+      ENCRYPTED_FIELDS.user
+    ),
+  }
+};
 
 // --- Secure CRUD Operations ---
 export class AppwriteService {
-  // ...existing code for createCredential, createTOTPSecret, createFolder, createSecurityLog, createUserDoc, hasMasterpass, setMasterpassFlag, getCredential, getTOTPSecret, getFolder, getUserDoc, getSecurityLog, listCredentials, listTOTPSecrets, listFolders, listSecurityLogs, updateCredential, updateTOTPSecret, updateFolder, updateUserDoc, updateSecurityLog, deleteCredential, deleteTOTPSecret, deleteFolder, deleteSecurityLog, deleteUserDoc, logSecurityEvent, encryptDocumentFields, decryptDocumentFields, shouldEncryptField, shouldDecryptField, searchCredentials, bulkCreateCredentials, exportUserData...
+  static async createCredential(data: Omit<Credentials, '$id' | '$createdAt' | '$updatedAt'>): Promise<Credentials> {
+    const encryptedData = await this.encryptDocumentFields(data, 'credentials');
+    const doc = await appwriteDatabases.createDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_CREDENTIALS_ID,
+      ID.unique(),
+      encryptedData
+    );
+    return await this.decryptDocumentFields(doc, 'credentials');
+  }
+
+  static async createTOTPSecret(data: Omit<TotpSecrets, '$id' | '$createdAt' | '$updatedAt'>): Promise<TotpSecrets> {
+    const encryptedData = await this.encryptDocumentFields(data, 'totpSecrets');
+    const doc = await appwriteDatabases.createDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_TOTPSECRETS_ID,
+      ID.unique(),
+      encryptedData
+    );
+    return await this.decryptDocumentFields(doc, 'totpSecrets');
+  }
+
+  static async createFolder(data: Omit<Folders, '$id' | '$createdAt' | '$updatedAt'>): Promise<Folders> {
+    const doc = await appwriteDatabases.createDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_FOLDERS_ID,
+      ID.unique(),
+      data
+    );
+    return doc as Folders;
+  }
+
+  static async createSecurityLog(data: Omit<SecurityLogs, '$id'>): Promise<SecurityLogs> {
+    const doc = await appwriteDatabases.createDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_SECURITYLOGS_ID,
+      ID.unique(),
+      data
+    );
+    return doc as SecurityLogs;
+  }
+
+  static async createUserDoc(data: Omit<User, '$id'>): Promise<User> {
+    const doc = await appwriteDatabases.createDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_USER_ID,
+      ID.unique(),
+      data
+    );
+    return doc as User;
+  }
+
+  static async hasMasterpass(userId: string): Promise<boolean> {
+    const userDoc = await this.getUserDoc(userId);
+    return !!(userDoc && userDoc.masterpass === true);
+  }
+
+  static async setMasterpassFlag(userId: string, email: string): Promise<void> {
+    const userDoc = await this.getUserDoc(userId);
+    if (userDoc && userDoc.$id) {
+      await appwriteDatabases.updateDocument(APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_USER_ID, userDoc.$id, { masterpass: true });
+    } else {
+      await appwriteDatabases.createDocument(APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_USER_ID, ID.unique(), {
+        userId,
+        email,
+        masterpass: true,
+      });
+    }
+    await masterPassCrypto.setMasterpassCheck(userId);
+  }
+
+  static async getCredential(id: string): Promise<Credentials> {
+    const doc = await appwriteDatabases.getDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_CREDENTIALS_ID,
+      id
+    );
+    return await this.decryptDocumentFields(doc, 'credentials');
+  }
+
+  static async getTOTPSecret(id: string): Promise<TotpSecrets> {
+    const doc = await appwriteDatabases.getDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_TOTPSECRETS_ID,
+      id
+    );
+    return await this.decryptDocumentFields(doc, 'totpSecrets');
+  }
+
+  static async getFolder(id: string): Promise<Folders> {
+    const doc = await appwriteDatabases.getDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_FOLDERS_ID,
+      id
+    );
+    return doc as Folders;
+  }
+
+  static async getUserDoc(userId: string): Promise<User | null> {
+    try {
+      const response = await appwriteDatabases.listDocuments(
+        APPWRITE_DATABASE_ID,
+        APPWRITE_COLLECTION_USER_ID,
+        [Query.equal('userId', userId)]
+      );
+      const doc = response.documents[0];
+      if (!doc) return null;
+      return doc as User;
+    } catch {
+      return null;
+    }
+  }
+
+  static async getSecurityLog(id: string): Promise<SecurityLogs> {
+    const doc = await appwriteDatabases.getDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_SECURITYLOGS_ID,
+      id
+    );
+    return doc as SecurityLogs;
+  }
+
+  static async listCredentials(userId: string, queries: string[] = []): Promise<Credentials[]> {
+    const response = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_CREDENTIALS_ID,
+      [Query.equal('userId', userId), ...queries]
+    );
+
+    return await Promise.all(
+      response.documents.map((doc: any) => this.decryptDocumentFields(doc, 'credentials'))
+    );
+  }
+
+  static async listTOTPSecrets(userId: string, queries: string[] = []): Promise<TotpSecrets[]> {
+    const response = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_TOTPSECRETS_ID,
+      [Query.equal('userId', userId), ...queries]
+    );
+    return await Promise.all(
+      response.documents.map((doc: any) => this.decryptDocumentFields(doc, 'totpSecrets'))
+    );
+  }
+
+  static async listFolders(userId: string, queries: string[] = []): Promise<Folders[]> {
+    const response = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_FOLDERS_ID,
+      [Query.equal('userId', userId), ...queries]
+    );
+    return response.documents as Folders[];
+  }
+
+  static async listSecurityLogs(userId: string, queries: string[] = []): Promise<SecurityLogs[]> {
+    const response = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_SECURITYLOGS_ID,
+      [Query.equal('userId', userId), Query.orderDesc('timestamp'), ...queries]
+    );
+    return response.documents as SecurityLogs[];
+  }
+
+  static async updateCredential(id: string, data: Partial<Credentials>): Promise<Credentials> {
+    const encryptedData = await this.encryptDocumentFields(data, 'credentials');
+    const doc = await appwriteDatabases.updateDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_CREDENTIALS_ID,
+      id,
+      encryptedData
+    );
+    return await this.decryptDocumentFields(doc, 'credentials');
+  }
+
+  static async updateTOTPSecret(id: string, data: Partial<TotpSecrets>): Promise<TotpSecrets> {
+    const encryptedData = await this.encryptDocumentFields(data, 'totpSecrets');
+    const doc = await appwriteDatabases.updateDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_TOTPSECRETS_ID,
+      id,
+      encryptedData
+    );
+    return await this.decryptDocumentFields(doc, 'totpSecrets');
+  }
+
+  static async updateFolder(id: string, data: Partial<Folders>): Promise<Folders> {
+    const doc = await appwriteDatabases.updateDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_FOLDERS_ID,
+      id,
+      data
+    );
+    return doc as Folders;
+  }
+
+  static async updateUserDoc(id: string, data: Partial<User>): Promise<User> {
+    const doc = await appwriteDatabases.updateDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_USER_ID,
+      id,
+      data
+    );
+    return doc as User;
+  }
+
+  static async updateSecurityLog(id: string, data: Partial<SecurityLogs>): Promise<SecurityLogs> {
+    const doc = await appwriteDatabases.updateDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_SECURITYLOGS_ID,
+      id,
+      data
+    );
+    return doc as SecurityLogs;
+  }
+
+  static async deleteCredential(id: string): Promise<void> {
+    await appwriteDatabases.deleteDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_CREDENTIALS_ID,
+      id
+    );
+  }
+
+  static async deleteTOTPSecret(id: string): Promise<void> {
+    await appwriteDatabases.deleteDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_TOTPSECRETS_ID,
+      id
+    );
+  }
+
+  static async deleteFolder(id: string): Promise<void> {
+    await appwriteDatabases.deleteDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_FOLDERS_ID,
+      id
+    );
+  }
+
+  static async deleteSecurityLog(id: string): Promise<void> {
+    await appwriteDatabases.deleteDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_SECURITYLOGS_ID,
+      id
+    );
+  }
+
+  static async deleteUserDoc(id: string): Promise<void> {
+    await appwriteDatabases.deleteDocument(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_USER_ID,
+      id
+    );
+  }
+
+  static async logSecurityEvent(
+    userId: string,
+    eventType: string,
+    details?: Record<string, any>,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
+    await this.createSecurityLog({
+      userId,
+      eventType,
+      details: details ? JSON.stringify(details) : null,
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  private static async encryptDocumentFields(data: any, collectionType: keyof typeof COLLECTION_SCHEMAS): Promise<any> {
+    const schema = COLLECTION_SCHEMAS[collectionType];
+    const result = { ...data };
+
+    if (!masterPassCrypto.isVaultUnlocked()) {
+      throw new Error('Vault is locked - cannot encrypt data');
+    }
+
+    for (const field of schema.encrypted) {
+      const fieldValue = result[field];
+      if (this.shouldEncryptField(fieldValue)) {
+        try {
+          result[field] = await masterPassCrypto.encryptField(String(fieldValue));
+        } catch (error) {
+          throw new Error(`Encryption failed for ${field}: ${error}`);
+        }
+      } else {
+        delete result[field];
+      }
+    }
+    return result;
+  }
+
+  private static async decryptDocumentFields(doc: any, collectionType: keyof typeof COLLECTION_SCHEMAS): Promise<any> {
+    const schema = COLLECTION_SCHEMAS[collectionType];
+    const result = { ...doc };
+
+    if (!masterPassCrypto.isVaultUnlocked()) {
+      return result;
+    }
+
+    for (const field of schema.encrypted) {
+      const fieldValue = result[field];
+      if (this.shouldDecryptField(fieldValue)) {
+        try {
+          result[field] = await masterPassCrypto.decryptField(fieldValue);
+        } catch {
+          result[field] = '[DECRYPTION_FAILED]';
+        }
+      } else {
+        result[field] = fieldValue === null ? null : (fieldValue === undefined ? null : fieldValue);
+      }
+    }
+    return result;
+  }
+
+  private static shouldEncryptField(value: any): boolean {
+    return (
+      value !== null &&
+      value !== undefined &&
+      typeof value === 'string' &&
+      value.trim().length > 0
+    );
+  }
+
+  private static shouldDecryptField(value: any): boolean {
+    return (
+      value !== null &&
+      value !== undefined &&
+      typeof value === 'string' &&
+      value.length > 20 &&
+      /^[A-Za-z0-9+/]+=*$/.test(value)
+    );
+  }
+
+  static async searchCredentials(userId: string, searchTerm: string): Promise<Credentials[]> {
+    const allCredentials = await this.listCredentials(userId);
+    const term = searchTerm.toLowerCase();
+    return allCredentials.filter(cred =>
+      cred.name?.toLowerCase().includes(term) ||
+      cred.username?.toLowerCase().includes(term) ||
+      (cred.url && cred.url.toLowerCase().includes(term))
+    );
+  }
+
+  static async bulkCreateCredentials(credentials: Omit<Credentials, '$id' | '$createdAt' | '$updatedAt'>[]): Promise<Credentials[]> {
+    return await Promise.all(credentials.map(cred => this.createCredential(cred)));
+  }
+
+  static async exportUserData(userId: string): Promise<{
+    credentials: Credentials[];
+    totpSecrets: TotpSecrets[];
+    folders: Folders[];
+  }> {
+    const [credentials, totpSecrets, folders] = await Promise.all([
+      this.listCredentials(userId),
+      this.listTOTPSecrets(userId),
+      this.listFolders(userId)
+    ]);
+    return { credentials, totpSecrets, folders };
+  }
 }
 
 // --- 2FA / MFA Helpers ---
@@ -53,7 +476,7 @@ export async function verifyTotpFactor(otp: string) {
     const challenge = await appwriteAccount.createMfaChallenge(AuthenticationFactor.Totp);
     await appwriteAccount.updateMfaChallenge(challenge.$id, otp);
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -77,7 +500,7 @@ export async function addEmailFactor(email: string, password?: string) {
     }
     await appwriteAccount.createVerification(window.location.origin + "/verify-email");
     return { email };
-  } catch (error) {
+  } catch {
     return { email };
   }
 }
@@ -124,10 +547,10 @@ export {
 export async function listTotpSecrets(userId: string) {
   return await AppwriteService.listTOTPSecrets(userId);
 }
-export async function createFolder(data: any) {
+export async function createFolder(data: Omit<Folders, '$id' | '$createdAt' | '$updatedAt'>) {
   return await AppwriteService.createFolder(data);
 }
-export async function createTotpSecret(data: any) {
+export async function createTotpSecret(data: Omit<TotpSecrets, '$id' | '$createdAt' | '$updatedAt'>) {
   return await AppwriteService.createTOTPSecret(data);
 }
 export async function deleteTotpSecret(id: string) {
@@ -156,10 +579,10 @@ export async function deleteUserAccount(userId: string) {
     AppwriteService.listSecurityLogs(userId),
   ]);
   await Promise.all([
-    ...creds.map((c: any) => AppwriteService.deleteCredential(c.$id)),
-    ...totps.map((t: any) => AppwriteService.deleteTOTPSecret(t.$id)),
-    ...folders.map((f: any) => AppwriteService.deleteFolder(f.$id)),
-    ...logs.map((l: any) => AppwriteService.deleteSecurityLog(l.$id)),
+    ...creds.map((c) => AppwriteService.deleteCredential(c.$id)),
+    ...totps.map((t) => AppwriteService.deleteTOTPSecret(t.$id)),
+    ...folders.map((f) => AppwriteService.deleteFolder(f.$id)),
+    ...logs.map((l) => AppwriteService.deleteSecurityLog(l.$id)),
   ]);
   await appwriteAccount.deleteSession("current");
   // Optionally, delete Appwrite account
@@ -172,7 +595,69 @@ export async function setMasterpassFlag(userId: string, email: string): Promise<
   return await AppwriteService.setMasterpassFlag(userId, email);
 }
 export async function resetMasterpassAndWipe(userId: string): Promise<void> {
-  // ...existing code for wiping user data and clearing check value...
+  // Use raw Appwrite database API to avoid decryption
+  // Delete user doc
+  try {
+    const userDocs = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_USER_ID,
+      [Query.equal('userId', userId)]
+    );
+    for (const doc of userDocs.documents) {
+      await appwriteDatabases.deleteDocument(APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_USER_ID, doc.$id);
+    }
+  } catch {}
+
+  // Delete credentials
+  try {
+    const creds = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_CREDENTIALS_ID,
+      [Query.equal('userId', userId)]
+    );
+    for (const doc of creds.documents) {
+      await appwriteDatabases.deleteDocument(APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_CREDENTIALS_ID, doc.$id);
+    }
+  } catch {}
+
+  // Delete totp secrets
+  try {
+    const totps = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_TOTPSECRETS_ID,
+      [Query.equal('userId', userId)]
+    );
+    for (const doc of totps.documents) {
+      await appwriteDatabases.deleteDocument(APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_TOTPSECRETS_ID, doc.$id);
+    }
+  } catch {}
+
+  // Delete folders
+  try {
+    const folders = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_FOLDERS_ID,
+      [Query.equal('userId', userId)]
+    );
+    for (const doc of folders.documents) {
+      await appwriteDatabases.deleteDocument(APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_FOLDERS_ID, doc.$id);
+    }
+  } catch {}
+
+  // Delete security logs
+  try {
+    const logs = await appwriteDatabases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      APPWRITE_COLLECTION_SECURITYLOGS_ID,
+      [Query.equal('userId', userId)]
+    );
+    for (const doc of logs.documents) {
+      await appwriteDatabases.deleteDocument(APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_SECURITYLOGS_ID, doc.$id);
+    }
+  } catch {}
+
+  // After reset, clear the check value
+  await masterPassCrypto.clearMasterpassCheck(userId);
 }
 export async function searchCredentials(userId: string, searchTerm: string) {
   return await AppwriteService.searchCredentials(userId, searchTerm);
@@ -180,10 +665,10 @@ export async function searchCredentials(userId: string, searchTerm: string) {
 export async function listCredentials(userId: string) {
   return await AppwriteService.listCredentials(userId);
 }
-export async function createCredential(data: any) {
+export async function createCredential(data: Omit<Credentials, '$id' | '$createdAt' | '$updatedAt'>) {
   return await AppwriteService.createCredential(data);
 }
-export async function updateCredential(id: string, data: any) {
+export async function updateCredential(id: string, data: Partial<Credentials>) {
   return await AppwriteService.updateCredential(id, data);
 }
 export async function deleteCredential(id: string) {
@@ -202,6 +687,7 @@ export async function removeMfaFactor(factorType: 'totp' | 'email' | 'phone'): P
   if (factorType === 'totp') {
     await removeTotpFactor();
   }
+  // Add handling for other factor types as needed
 }
 export async function getMfaStatus(): Promise<{
   enabled: boolean;
@@ -225,13 +711,11 @@ export async function getMfaStatus(): Promise<{
       factors,
       requiresSetup: hasAnyFactor && !mfaEnabled
     };
-  } catch (error) {
+  } catch {
     return {
       enabled: false,
       factors: { totp: false, email: false, phone: false },
       requiresSetup: false
     };
-  }
-}
   }
 }
