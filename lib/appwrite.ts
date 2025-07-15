@@ -1,4 +1,4 @@
-import Appwrite, { AuthenticationFactor, AuthenticatorType, ID, Query } from "appwrite"; // Add this line
+import { Client, Account, Databases, ID, Query, AuthenticationFactor, AuthenticatorType } from "appwrite"; // Add this line
 import type { Credentials, TotpSecrets, Folders, SecurityLogs, User } from "../types/appwrite.d";
 import { updateMasterpassCheckValue, masterPassCrypto } from "../app/(protected)/masterpass/logic";
 import {
@@ -13,12 +13,12 @@ import {
 } from "./constants";
 
 // --- Appwrite Client Setup ---
-const appwriteClient = new Appwrite.Client()
+const appwriteClient = new Client()
   .setEndpoint(APPWRITE_ENDPOINT)
   .setProject(APPWRITE_PROJECT_ID);
 
-const appwriteAccount = new Appwrite.Account(appwriteClient);
-const appwriteDatabases = new Appwrite.Databases(appwriteClient);
+const appwriteAccount = new Account(appwriteClient);
+const appwriteDatabases = new Databases(appwriteClient);
 
 // --- Collection Structure & Field Mappings ---
 const ENCRYPTED_FIELDS = {
