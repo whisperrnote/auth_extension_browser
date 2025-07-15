@@ -2,6 +2,12 @@ import { appwriteDatabases, APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_USER_ID, A
 import type { User } from "../../../types/appwrite.d";
 
 class MasterPassCrypto {
+  encryptField(arg0: string): any {
+      throw new Error("Method not implemented.");
+  }
+  decryptField(fieldValue: any): any {
+      throw new Error("Method not implemented.");
+  }
   private static instance: MasterPassCrypto;
   private masterKey: CryptoKey | null = null;
   private isUnlocked = false;
