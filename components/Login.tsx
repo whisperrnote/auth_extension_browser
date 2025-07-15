@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Button, TextField, Card, CardContent, CardHeader, Typography, CircularProgress, Box } from "@mui/material";
-import { Check, Mail, KeyRound, Link2, Visibility, VisibilityOff } from "lucide-react";
+import { Check, Mail, KeyRound, Link2 } from "lucide-react";
+import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { useExtensionStore } from "../store/extensionStore";
 import {
   loginWithEmailPassword,
@@ -211,7 +212,7 @@ export default function Login() {
                         sx={{ minWidth: 0, p: 0 }}
                         tabIndex={-1}
                       >
-                        {showPassword ? <VisibilityOff size={20} /> : <Visibility size={20} />}
+                        {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
                       </Button>
                     ),
                   }}

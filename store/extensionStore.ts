@@ -1,52 +1,49 @@
-import { create } from "zustand";
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
-type ExtensionState = {
-  user: any;
-  vaultUnlocked: boolean;
+interface ExtensionState {
   currentPage: string;
-  // ...other state...
-  setUser: (user: any) => void;
-  setVaultUnlocked: (unlocked: boolean) => void;
+  user: any;
+  isAuthenticated: boolean;
+  isVaultUnlocked: boolean;
+  popoutWindow: Window | null;
+  isPopout: boolean;
   setCurrentPage: (page: string) => void;
+  setUser: (user: any) => void;
+  setAuthenticated: (auth: boolean) => void;
+  setVaultUnlocked: (unlocked: boolean) => void;
+  setPopoutWindow: (window: Window | null) => void;
+  setIsPopout: (isPopout: boolean) => void;
+}
+
+export const useExtensionStore = create<ExtensionState>()(
+  persist(
+    (set) => ({
+      currentPage: 'login',
+      user: null,
+      isAuthenticated: false,
+      isVaultUnlocked: false,
+      popoutWindow: null,
+      isPopout: false,
+      setCurrentPage: (page) => set({ currentPage: page }),
+      setUser: (user) => set({ user }),
+      setAuthenticated: (auth) => set({ isAuthenticated: auth }),
+      setVaultUnlocked: (unlocked) => set({ isVaultUnlocked: unlocked }),
+      setPopoutWindow: (window) => set({ popoutWindow: window }),
+      setIsPopout: (isPopout) => set({ isPopout }),
+    }),
+    {
+      name: 'extension-store',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);
+
+export const restoreStateFromStorage = async () => {
+  // Force rehydration of the store
+  useExtensionStore.persist.rehydrate();
 };
-
-export const useExtensionStore = create<ExtensionState>((set) => ({
-  user: null,
-  vaultUnlocked: false,
-  currentPage: "login",
-  setUser: (user) => set({ user }),
-  setVaultUnlocked: (vaultUnlocked) => set({ vaultUnlocked }),
-  setCurrentPage: (currentPage) => set({ currentPage }),
-}));
-
-// Persist state to chrome.storage.local or localStorage
-export async function persistStateToStorage(state: ExtensionState) {
-  try {
-    if (window.chrome?.storage?.local) {
-      await chrome.storage.local.set({ extensionState: state });
-    } else {
-      localStorage.setItem("extensionState", JSON.stringify(state));
-    }
-  } catch {}
-}
-
-export async function restoreStateFromStorage() {
-  try {
-    if (window.chrome?.storage?.local) {
-      chrome.storage.local.get("extensionState", (result) => {
-        if (result.extensionState) {
-          useExtensionStore.setState(result.extensionState);
-        }
-      });
-    } else {
-      const raw = localStorage.getItem("extensionState");
-      if (raw) {
-        useExtensionStore.setState(JSON.parse(raw));
-      }
-    }
-  } catch {}
-}
-
+ 
 // Subscribe to store changes and persist automatically
 useExtensionStore.subscribe((state) => {
   persistStateToStorage(state);
