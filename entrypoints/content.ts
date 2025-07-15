@@ -3,8 +3,9 @@ import { createRoot } from "react-dom/client";
 import App from "../components/App";
 import { restoreStateFromStorage } from "../store/extensionStore";
 import { defineContentScript } from "wxt";
+import { Button, Paper, Box } from "@mui/material";
 
-// Widget button styles
+// Widget button styles using Material UI Box
 const widgetBtnStyle: React.CSSProperties = {
   position: "fixed",
   top: "20px",
@@ -24,20 +25,18 @@ const widgetBtnStyle: React.CSSProperties = {
 
 function WidgetButton({ onClick }: { onClick: () => void }) {
   return (
-    <div style={widgetBtnStyle} onClick={onClick} title="Open Whisperr Auth">
-      {/* Simple icon */}
+    <Box sx={widgetBtnStyle} onClick={onClick} title="Open Whisperr Auth">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="12" r="10" stroke="#888" strokeWidth="2" />
         <path d="M8 12h8M12 8v8" stroke="#888" strokeWidth="2" strokeLinecap="round" />
       </svg>
-    </div>
+    </Box>
   );
 }
 
 export default defineContentScript({
   matches: ['*://*.google.com/*'],
   async main() {
-    // Restore state from storage on load
     await restoreStateFromStorage();
 
     // Inject widget button
@@ -58,13 +57,24 @@ export default defineContentScript({
       overlayContainer.style.zIndex = "99999";
       overlayContainer.style.width = "400px";
       overlayContainer.style.height = "600px";
-      overlayContainer.style.background = "rgba(255,255,255,0.95)";
+      overlayContainer.style.background = "transparent";
       overlayContainer.style.borderRadius = "16px";
       overlayContainer.style.boxShadow = "0 4px 24px rgba(0,0,0,0.13)";
       overlayContainer.style.overflow = "auto";
       document.body.appendChild(overlayContainer);
       const overlayRoot = createRoot(overlayContainer);
-      overlayRoot.render(<App onPopOut={popOutWindow} onClose={closeOverlay} />);
+      overlayRoot.render(
+        <Paper elevation={8} sx={{
+          width: "100%",
+          height: "100%",
+          borderRadius: "16px",
+          background: "rgba(255,255,255,0.95)",
+          boxShadow: "0 4px 24px rgba(0,0,0,0.13)",
+          overflow: "auto",
+        }}>
+          <App onPopOut={popOutWindow} onClose={closeOverlay} />
+        </Paper>
+      );
     };
 
     const closeOverlay = () => {
@@ -78,7 +88,7 @@ export default defineContentScript({
     const popOutWindow = () => {
       closeOverlay();
       window.open(
-        chrome.runtime.getURL("popup.html"), // Or a dedicated extension page
+        chrome.runtime.getURL("popup.html"),
         "WhisperrAuthPopup",
         "width=420,height=640,top=100,right=100"
       );
