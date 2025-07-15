@@ -1,12 +1,18 @@
 import { Client, Account, Databases, ID, Query, AuthenticationFactor, AuthenticatorType } from "appwrite";
-// Import types from extension's types location
-// import type { Credentials, TotpSecrets, Folders, SecurityLogs, User } from "../types/appwrite.d";
+import type { Credentials, TotpSecrets, Folders, SecurityLogs, User } from "../types/appwrite.d";
 import { updateMasterpassCheckValue, masterPassCrypto } from "../app/(protected)/masterpass/logic";
+import {
+  APPWRITE_ENDPOINT,
+  APPWRITE_PROJECT_ID,
+  APPWRITE_DATABASE_ID,
+  APPWRITE_COLLECTION_CREDENTIALS_ID,
+  APPWRITE_COLLECTION_TOTPSECRETS_ID,
+  APPWRITE_COLLECTION_FOLDERS_ID,
+  APPWRITE_COLLECTION_SECURITYLOGS_ID,
+  APPWRITE_COLLECTION_USER_ID,
+} from "./constants";
 
 // --- Appwrite Client Setup ---
-const APPWRITE_ENDPOINT = "https://[HOSTNAME]/v1"; // Replace with your endpoint
-const APPWRITE_PROJECT_ID = "[PROJECT_ID]"; // Replace with your project ID
-
 const appwriteClient = new Client()
   .setEndpoint(APPWRITE_ENDPOINT)
   .setProject(APPWRITE_PROJECT_ID);
@@ -15,12 +21,6 @@ const appwriteAccount = new Account(appwriteClient);
 const appwriteDatabases = new Databases(appwriteClient);
 
 // --- Database & Collection IDs ---
-export const APPWRITE_DATABASE_ID = "passwordManagerDb";
-export const APPWRITE_COLLECTION_CREDENTIALS_ID = "credentials";
-export const APPWRITE_COLLECTION_TOTPSECRETS_ID = "totpSecrets";
-export const APPWRITE_COLLECTION_FOLDERS_ID = "folders";
-export const APPWRITE_COLLECTION_SECURITYLOGS_ID = "securityLogs";
-export const APPWRITE_COLLECTION_USER_ID = "user";
 
 // --- Collection Structure & Field Mappings ---
 // ...existing code for ENCRYPTED_FIELDS, getPlaintextFields, COLLECTION_SCHEMAS...

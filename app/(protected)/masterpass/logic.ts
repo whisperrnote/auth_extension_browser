@@ -1,4 +1,5 @@
 import { Client, Account } from "appwrite";
+import type { User } from "../../types/appwrite.d";
 
 // Initialize Appwrite client
 const client = new Client();
