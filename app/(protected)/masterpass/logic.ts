@@ -1,5 +1,5 @@
-import { appwriteDatabases, APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_USER_ID, APPWRITE_COLLECTION_CREDENTIALS_ID, APPWRITE_COLLECTION_TOTPSECRETS_ID, APPWRITE_COLLECTION_FOLDERS_ID, APPWRITE_COLLECTION_SECURITYLOGS_ID, Query } from "../../../lib/appwrite";
-import type { User } from "../../../types/appwrite.d";
+import { appwriteDatabases, Query } from "../../../lib/appwrite";
+import {APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_USER_ID} from '../../../lib/constants'
 
 class MasterPassCrypto {
   encryptField(arg0: string): any {
