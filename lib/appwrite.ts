@@ -20,8 +20,6 @@ const appwriteClient = new Client()
 const appwriteAccount = new Account(appwriteClient);
 const appwriteDatabases = new Databases(appwriteClient);
 
-// --- Database & Collection IDs ---
-
 // --- Collection Structure & Field Mappings ---
 // ...existing code for ENCRYPTED_FIELDS, getPlaintextFields, COLLECTION_SCHEMAS...
 
@@ -233,5 +231,7 @@ export async function getMfaStatus(): Promise<{
       factors: { totp: false, email: false, phone: false },
       requiresSetup: false
     };
+  }
+}
   }
 }
